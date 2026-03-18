@@ -246,6 +246,9 @@ type ProvidersConfig struct {
 	// "google-antigravity"). When set alongside a provider's auth_mode="oauth",
 	// credentials are loaded from the secrets backend instead of using an API key.
 	OAuthProvider string `mapstructure:"oauth_provider"`
+	// OAuthModel specifies the model to use with the OAuth provider.
+	// Falls back to the provider's default model when empty.
+	OAuthModel string `mapstructure:"oauth_model"`
 	// OAuthProfile specifies the named profile to use for OAuth authentication.
 	// Allows multiple accounts per provider. Defaults to "default" if empty.
 	OAuthProfile string `mapstructure:"oauth_profile"`

@@ -402,6 +402,12 @@ type ComplexityRoot struct {
 		Success func(childComplexity int) int
 	}
 
+	OAuthModel struct {
+		ID        func(childComplexity int) int
+		IsDefault func(childComplexity int) int
+		Name      func(childComplexity int) int
+	}
+
 	OAuthProfile struct {
 		AccountID     func(childComplexity int) int
 		Authenticated func(childComplexity int) int
@@ -456,6 +462,7 @@ type ComplexityRoot struct {
 		Messages               func(childComplexity int, conversationID string, before *string, limit *int) int
 		Metrics                func(childComplexity int) int
 		PendingPairings        func(childComplexity int) int
+		ProviderOAuthModels    func(childComplexity int, provider string) int
 		ProviderOAuthProfiles  func(childComplexity int, provider string) int
 		ProviderOAuthProviders func(childComplexity int) int
 		ProviderOAuthStatus    func(childComplexity int, provider string) int
@@ -652,6 +659,7 @@ type QueryResolver interface {
 	ProviderOAuthProviders(ctx context.Context) ([]*OAuthProviderInfo, error)
 	ProviderOAuthStatus(ctx context.Context, provider string) (*ProviderOAuthStatus, error)
 	ProviderOAuthProfiles(ctx context.Context, provider string) ([]*OAuthProfile, error)
+	ProviderOAuthModels(ctx context.Context, provider string) ([]*OAuthModel, error)
 	Conversations(ctx context.Context) ([]*Conversation, error)
 	Messages(ctx context.Context, conversationID string, before *string, limit *int) ([]*Message, error)
 	SearchMemory(ctx context.Context, query string) (*SearchMemoryResult, error)
@@ -2341,6 +2349,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.OAuthInitiateResult.Success(childComplexity), true
 
+	case "OAuthModel.id":
+		if e.ComplexityRoot.OAuthModel.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OAuthModel.ID(childComplexity), true
+	case "OAuthModel.isDefault":
+		if e.ComplexityRoot.OAuthModel.IsDefault == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OAuthModel.IsDefault(childComplexity), true
+	case "OAuthModel.name":
+		if e.ComplexityRoot.OAuthModel.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OAuthModel.Name(childComplexity), true
+
 	case "OAuthProfile.accountID":
 		if e.ComplexityRoot.OAuthProfile.AccountID == nil {
 			break
@@ -2568,6 +2595,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.PendingPairings(childComplexity), true
+	case "Query.providerOAuthModels":
+		if e.ComplexityRoot.Query.ProviderOAuthModels == nil {
+			break
+		}
+
+		args, err := ec.field_Query_providerOAuthModels_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.ProviderOAuthModels(childComplexity, args["provider"].(string)), true
 	case "Query.providerOAuthProfiles":
 		if e.ComplexityRoot.Query.ProviderOAuthProfiles == nil {
 			break
@@ -3645,6 +3683,12 @@ type InitiateProviderOAuthResult {
   instructions:     String
 }
 
+type OAuthModel {
+  id: String!
+  name: String!
+  isDefault: Boolean!
+}
+
 extend type Query {
   config: AppConfig
   """List available OAuth providers for AI authentication."""
@@ -3653,6 +3697,8 @@ extend type Query {
   providerOAuthStatus(provider: String!): ProviderOAuthStatus!
   """List OAuth profiles for a specific provider."""
   providerOAuthProfiles(provider: String!): [OAuthProfile!]!
+  """List available models for an OAuth provider."""
+  providerOAuthModels(provider: String!): [OAuthModel!]!
 }
 
 extend type Mutation {
@@ -4630,6 +4676,17 @@ func (ec *executionContext) field_Query_messages_args(ctx context.Context, rawAr
 		return nil, err
 	}
 	args["limit"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_providerOAuthModels_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "provider", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["provider"] = arg0
 	return args, nil
 }
 
@@ -12511,6 +12568,93 @@ func (ec *executionContext) fieldContext_OAuthInitiateResult_error(_ context.Con
 	return fc, nil
 }
 
+func (ec *executionContext) _OAuthModel_id(ctx context.Context, field graphql.CollectedField, obj *OAuthModel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OAuthModel_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OAuthModel_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OAuthModel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OAuthModel_name(ctx context.Context, field graphql.CollectedField, obj *OAuthModel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OAuthModel_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OAuthModel_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OAuthModel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OAuthModel_isDefault(ctx context.Context, field graphql.CollectedField, obj *OAuthModel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OAuthModel_isDefault,
+		func(ctx context.Context) (any, error) {
+			return obj.IsDefault, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OAuthModel_isDefault(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OAuthModel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _OAuthProfile_id(ctx context.Context, field graphql.CollectedField, obj *OAuthProfile) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13613,6 +13757,55 @@ func (ec *executionContext) fieldContext_Query_providerOAuthProfiles(ctx context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_providerOAuthProfiles_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_providerOAuthModels(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_providerOAuthModels,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().ProviderOAuthModels(ctx, fc.Args["provider"].(string))
+		},
+		nil,
+		ec.marshalNOAuthModel2ᚕᚖgithubᚗcomᚋneirthᚋopenlobsterᚋinternalᚋapplicationᚋgraphqlᚋgeneratedᚐOAuthModelᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_providerOAuthModels(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_OAuthModel_id(ctx, field)
+			case "name":
+				return ec.fieldContext_OAuthModel_name(ctx, field)
+			case "isDefault":
+				return ec.fieldContext_OAuthModel_isDefault(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OAuthModel", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_providerOAuthModels_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -21353,6 +21546,55 @@ func (ec *executionContext) _OAuthInitiateResult(ctx context.Context, sel ast.Se
 	return out
 }
 
+var oAuthModelImplementors = []string{"OAuthModel"}
+
+func (ec *executionContext) _OAuthModel(ctx context.Context, sel ast.SelectionSet, obj *OAuthModel) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, oAuthModelImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OAuthModel")
+		case "id":
+			out.Values[i] = ec._OAuthModel_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._OAuthModel_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isDefault":
+			out.Values[i] = ec._OAuthModel_isDefault(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var oAuthProfileImplementors = []string{"OAuthProfile"}
 
 func (ec *executionContext) _OAuthProfile(ctx context.Context, sel ast.SelectionSet, obj *OAuthProfile) graphql.Marshaler {
@@ -21869,6 +22111,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_providerOAuthProfiles(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "providerOAuthModels":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_providerOAuthModels(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -23889,6 +24153,32 @@ func (ec *executionContext) marshalNOAuthInitiateResult2ᚖgithubᚗcomᚋneirth
 		return graphql.Null
 	}
 	return ec._OAuthInitiateResult(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNOAuthModel2ᚕᚖgithubᚗcomᚋneirthᚋopenlobsterᚋinternalᚋapplicationᚋgraphqlᚋgeneratedᚐOAuthModelᚄ(ctx context.Context, sel ast.SelectionSet, v []*OAuthModel) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNOAuthModel2ᚖgithubᚗcomᚋneirthᚋopenlobsterᚋinternalᚋapplicationᚋgraphqlᚋgeneratedᚐOAuthModel(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNOAuthModel2ᚖgithubᚗcomᚋneirthᚋopenlobsterᚋinternalᚋapplicationᚋgraphqlᚋgeneratedᚐOAuthModel(ctx context.Context, sel ast.SelectionSet, v *OAuthModel) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OAuthModel(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNOAuthProfile2ᚕᚖgithubᚗcomᚋneirthᚋopenlobsterᚋinternalᚋapplicationᚋgraphqlᚋgeneratedᚐOAuthProfileᚄ(ctx context.Context, sel ast.SelectionSet, v []*OAuthProfile) graphql.Marshaler {

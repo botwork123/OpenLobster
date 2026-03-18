@@ -64,6 +64,21 @@ func (r *mutationResolver) InitiateProviderOAuth(ctx context.Context, provider s
 			errCh <- err
 		} else {
 			log.Printf("provider-oauth: login succeeded for %s/%s", provider, profile)
+			// Auto-set oauth_provider and default model in config after successful login.
+			if r.Deps.ConfigWriter != nil {
+				defaultModel := provideroauth.GetDefaultModel(provider)
+				configUpdate := map[string]interface{}{
+					"oauthProvider": provider,
+				}
+				if defaultModel != "" {
+					configUpdate["oauthModel"] = defaultModel
+				}
+				if _, applyErr := r.Deps.ConfigWriter.Apply(context.Background(), configUpdate); applyErr != nil {
+					log.Printf("provider-oauth: failed to auto-set config for %s: %v", provider, applyErr)
+				} else {
+					log.Printf("provider-oauth: auto-set oauth_provider=%s oauth_model=%s", provider, defaultModel)
+				}
+			}
 		}
 	}()
 
@@ -178,6 +193,20 @@ func (r *queryResolver) ProviderOAuthProfiles(ctx context.Context, provider stri
 		}
 		if p.AccountID != "" {
 			out[i].AccountID = &p.AccountID
+		}
+	}
+	return out, nil
+}
+
+// ProviderOAuthModels is the resolver for the providerOAuthModels field.
+func (r *queryResolver) ProviderOAuthModels(ctx context.Context, provider string) ([]*generated.OAuthModel, error) {
+	models := provideroauth.GetModels(provider)
+	out := make([]*generated.OAuthModel, len(models))
+	for i, m := range models {
+		out[i] = &generated.OAuthModel{
+			ID:        m.ID,
+			Name:      m.Name,
+			IsDefault: m.Default,
 		}
 	}
 	return out, nil

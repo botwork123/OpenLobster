@@ -11,6 +11,7 @@ package main
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
@@ -38,6 +39,9 @@ import (
 	aiopenaicompat "github.com/neirth/openlobster/internal/infrastructure/adapters/ai/openaicompat"
 	aiopenrouter "github.com/neirth/openlobster/internal/infrastructure/adapters/ai/openrouter"
 	aizenadapter "github.com/neirth/openlobster/internal/infrastructure/adapters/ai/zen"
+	"github.com/neirth/openlobster/internal/infrastructure/adapters/ai/codex"
+	"github.com/neirth/openlobster/internal/infrastructure/adapters/ai/oauthanthropic"
+	"github.com/neirth/openlobster/internal/infrastructure/adapters/ai/cloudcode"
 	browser "github.com/neirth/openlobster/internal/infrastructure/adapters/browser/chromedp"
 	"github.com/neirth/openlobster/internal/infrastructure/adapters/filesystem"
 	memfile "github.com/neirth/openlobster/internal/infrastructure/adapters/memory/file"
@@ -199,7 +203,8 @@ func (a *configUpdateAdapter) Apply(ctx context.Context, input map[string]interf
 func (a *configUpdateAdapter) isProviderInputKey(k string) bool {
 	switch k {
 	case "provider", "model", "apiKey", "baseURL", "ollamaHost", "ollamaApiKey",
-		"anthropicApiKey", "dockerModelRunnerEndpoint", "dockerModelRunnerModel":
+		"anthropicApiKey", "dockerModelRunnerEndpoint", "dockerModelRunnerModel",
+		"authMode", "oauthProvider", "oauthModel", "oauthProfile":
 		return true
 	}
 	return false
@@ -270,6 +275,21 @@ func (a *configUpdateAdapter) applyProviderKeys(input map[string]interface{}) {
 		if v, ok := input["model"].(string); ok {
 			viper.Set("providers.opencode.model", v)
 		}
+	}
+
+	// OAuth fields apply regardless of provider selection.
+	if v, ok := input["authMode"].(string); ok {
+		viper.Set("providers.openai.auth_mode", v)
+		viper.Set("providers.anthropic.auth_mode", v)
+	}
+	if v, ok := input["oauthProvider"].(string); ok {
+		viper.Set("providers.oauth_provider", v)
+	}
+	if v, ok := input["oauthModel"].(string); ok {
+		viper.Set("providers.oauth_model", v)
+	}
+	if v, ok := input["oauthProfile"].(string); ok {
+		viper.Set("providers.oauth_profile", v)
 	}
 }
 
@@ -1430,9 +1450,33 @@ This signals that initialization is done and you should no longer treat bootstra
 	dashMsgRepo := repositories.NewDashboardMessageRepository(messageRepo)
 
 	// -----------------------------------------------------------------------
+	// Secrets provider (needed early for OAuth-based AI providers)
+	// -----------------------------------------------------------------------
+	secretsBackendEarly := strings.ToLower(strings.TrimSpace(cfg.Secrets.Backend))
+	var earlySecretsProvider secrets.SecretsProvider
+	switch secretsBackendEarly {
+	case "openbao":
+		if cfg.Secrets.Openbao != nil && cfg.Secrets.Openbao.URL != "" && cfg.Secrets.Openbao.Token != "" {
+			earlySecretsProvider, _ = secrets.NewOpenBAOProvider(cfg.Secrets.Openbao.URL, cfg.Secrets.Openbao.Token, "secret")
+		}
+	default:
+		secretsPath := cfg.Secrets.File.Path
+		if secretsPath == "" {
+			secretsPath = "data/secrets.json"
+		}
+		earlySecretsProvider, _ = secrets.NewFileSecretsProvider(secretsPath, config.SecretKey())
+	}
+
+	// Provider OAuth manager for OAuth-based AI providers.
+	var earlyProviderOAuthMgr *provideroauth.Manager
+	if earlySecretsProvider != nil {
+		earlyProviderOAuthMgr = provideroauth.NewManager(earlySecretsProvider)
+	}
+
+	// -----------------------------------------------------------------------
 	// AI Provider (first configured wins; rebuilt on config soft-reboot)
 	// -----------------------------------------------------------------------
-	aiProvider := buildAIProviderFromConfig(cfg)
+	aiProvider := buildAIProviderFromConfigWithOAuth(cfg, earlyProviderOAuthMgr)
 	if aiProvider == nil {
 		log.Println("warn: no AI provider configured — agent will not respond to messages")
 	} else {
@@ -2133,9 +2177,15 @@ This signals that initialization is done and you should no longer treat bootstra
 	deps.McpOAuthPort = &mcpOAuthAdapter{oauth: oauthMgr}
 
 	// Wire ProviderOAuthMgr so provider OAuth login/logout/status work.
-	providerOAuthMgr := provideroauth.NewManager(secretsProvider)
-	providerOAuthMgr.StartAutoRefresh(context.Background())
-	deps.ProviderOAuthMgr = providerOAuthMgr
+	// Reuse the early manager if secrets providers match, otherwise create new.
+	if earlyProviderOAuthMgr != nil {
+		earlyProviderOAuthMgr.StartAutoRefresh(context.Background())
+		deps.ProviderOAuthMgr = earlyProviderOAuthMgr
+	} else {
+		providerOAuthMgr := provideroauth.NewManager(secretsProvider)
+		providerOAuthMgr.StartAutoRefresh(context.Background())
+		deps.ProviderOAuthMgr = providerOAuthMgr
+	}
 
 	// -----------------------------------------------------------------------
 	// HTTP mux: GraphQL + static frontend
@@ -2533,19 +2583,21 @@ func buildAIProviderFromConfigWithOAuth(cfg *config.Config, oauthMgr *provideroa
 		apiKey, err := oauthMgr.GetAPIKey(ctx, cfg.Providers.OAuthProvider)
 		if err == nil && apiKey != "" {
 			providerID := cfg.Providers.OAuthProvider
+			model := cfg.Providers.OAuthModel
+			if model == "" {
+				model = provideroauth.GetDefaultModel(providerID)
+			}
 			switch {
 			case providerID == "openai-codex":
-				model := cfg.Providers.OpenAI.Model
-				if model == "" {
-					model = "gpt-4o"
+				// Extract account ID from credentials for the Codex adapter.
+				creds, _ := oauthMgr.GetCredentials(ctx, providerID)
+				accountID := ""
+				if creds != nil {
+					accountID = creds.AccountID
 				}
-				p = aiopenai.NewAdapter(apiKey, model, maxOutputTokens)
+				p = codex.NewAdapter(apiKey, accountID, model, maxOutputTokens)
 			case providerID == "anthropic":
-				model := cfg.Providers.Anthropic.Model
-				if model == "" {
-					model = "claude-sonnet-4-6"
-				}
-				p = aianthropicadapter.NewAdapter(apiKey, model, maxOutputTokens)
+				p = oauthanthropic.NewAnthropicOAuthAdapter(apiKey, model, maxOutputTokens)
 			case providerID == "github-copilot":
 				creds, _ := oauthMgr.GetCredentials(ctx, providerID)
 				domain := ""
@@ -2553,22 +2605,23 @@ func buildAIProviderFromConfigWithOAuth(cfg *config.Config, oauthMgr *provideroa
 					domain = creds.Extra["enterprise_domain"]
 				}
 				baseURL := provideroauth.GetCopilotBaseURL(apiKey, domain)
-				model := cfg.Providers.OpenAI.Model
-				if model == "" {
-					model = "gpt-4o"
+				p = oauthanthropic.NewCopilotAdapter(apiKey, baseURL, model, maxOutputTokens)
+			case providerID == "google-gemini-cli":
+				var parsed struct {
+					Token     string `json:"token"`
+					ProjectID string `json:"projectId"`
 				}
-				p = aiopenai.NewAdapterWithEndpoint(baseURL, apiKey, model, maxOutputTokens)
-			case providerID == "google-gemini-cli" || providerID == "google-antigravity":
-				model := cfg.Providers.OpenAI.Model
-				if model == "" {
-					model = "gemini-2.0-flash"
+				if err := json.Unmarshal([]byte(apiKey), &parsed); err == nil && parsed.Token != "" {
+					p = cloudcode.NewGeminiAdapter(parsed.Token, parsed.ProjectID, model, maxOutputTokens)
 				}
-				p = aiopenaicompat.NewAdapter(
-					"https://cloudcode-pa.googleapis.com/v1",
-					apiKey,
-					model,
-					maxOutputTokens,
-				)
+			case providerID == "google-antigravity":
+				var parsed struct {
+					Token     string `json:"token"`
+					ProjectID string `json:"projectId"`
+				}
+				if err := json.Unmarshal([]byte(apiKey), &parsed); err == nil && parsed.Token != "" {
+					p = cloudcode.NewAntigravityAdapter(parsed.Token, parsed.ProjectID, model, maxOutputTokens)
+				}
 			}
 			if p != nil {
 				return p

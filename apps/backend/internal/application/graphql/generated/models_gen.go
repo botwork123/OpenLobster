@@ -346,6 +346,12 @@ type OAuthInitiateResult struct {
 	Error   *string `json:"error,omitempty"`
 }
 
+type OAuthModel struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	IsDefault bool   `json:"isDefault"`
+}
+
 type OAuthProfile struct {
 	ID            string  `json:"id"`
 	Name          string  `json:"name"`

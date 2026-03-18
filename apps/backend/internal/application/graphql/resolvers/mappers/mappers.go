@@ -654,6 +654,15 @@ func UpdateConfigInputToMap(input generated.UpdateConfigInput) map[string]interf
 	if input.ChannelSlackAppToken != nil {
 		m["channelSlackAppToken"] = *input.ChannelSlackAppToken
 	}
+	if input.AuthMode != nil {
+		m["authMode"] = *input.AuthMode
+	}
+	if input.OauthProvider != nil {
+		m["oauthProvider"] = *input.OauthProvider
+	}
+	if input.OauthProfile != nil {
+		m["oauthProfile"] = *input.OauthProfile
+	}
 	if input.WizardCompleted != nil {
 		m["wizardCompleted"] = *input.WizardCompleted
 	}

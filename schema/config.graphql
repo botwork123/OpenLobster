@@ -228,6 +228,12 @@ type InitiateProviderOAuthResult {
   instructions:     String
 }
 
+type OAuthModel {
+  id: String!
+  name: String!
+  isDefault: Boolean!
+}
+
 extend type Query {
   config: AppConfig
   """List available OAuth providers for AI authentication."""
@@ -236,6 +242,8 @@ extend type Query {
   providerOAuthStatus(provider: String!): ProviderOAuthStatus!
   """List OAuth profiles for a specific provider."""
   providerOAuthProfiles(provider: String!): [OAuthProfile!]!
+  """List available models for an OAuth provider."""
+  providerOAuthModels(provider: String!): [OAuthModel!]!
 }
 
 extend type Mutation {
